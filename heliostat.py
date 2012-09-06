@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 ## Device limits
 SPEED_MIN = 0x0a
 SPEED_MAX = 0x14
-AZIMUTH_MIN = 0x00b4
-AZIMUTH_MAX = 0x0168
+AZIMUTH_MIN = 90		# These are close to magnetic headings.
+AZIMUTH_MAX = 270
 ELEVATION_MIN = 0x15
 ELEVATION_MAX = 0x5a
 
@@ -188,33 +188,8 @@ logger.info("Azimuth range %d-%d", AZIMUTH_MIN, AZIMUTH_MAX)
 logger.info("Elevation range %d-%d", ELEVATION_MIN, ELEVATION_MAX)
 logger.info("Speed range %d-%d", SPEED_MIN, SPEED_MAX)
 
-controller = Controller('/dev/ttyUSB0')
-controller.elevation(70)
-
-# for i in range(2):
-#     controller.elevation(60)
-#     controller.azimuth(195)
-#     controller.elevation(65)
-#     controller.azimuth(200)
-# controller.elevation(50)
-
-controller.report_stats()
-
-# TIME	AZTH	ELV
-# 9:08	135	56
-# 9:30	137	57
-# 10:00	141	60
-# 10:30	144	63
-# 11:00	148	65
-# 11:30	152	68
-# 12:00	157	70
-# 12:30	163	72
-# 13:00	169	73
-# 13:30	178	74
-# 14:00	186	74
-# 14:30	196	73
-# 15:00	208	71
-# 15:30	213	70
-# 16:00	219	68
-# 16:30	225	66
-# 17:00	228	63
+if __name__ == '__main__':
+    controller = Controller('/dev/ttyUSB0')
+    controller.azimuth(148)
+    controller.elevation(65)
+    controller.report_stats()
