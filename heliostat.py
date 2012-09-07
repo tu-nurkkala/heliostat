@@ -78,12 +78,28 @@ class Decoder(struct.Struct):
         logger.debug("AZ {azimuth} EL {elevation} TEMP {temperature} HUM {humidity}".format(**response))
         return response
 
+class MockController(object):
+    def __init__(self, device='/dev/ttyUSB0'):
+        pass
+
+    def stop(self):
+        logger.debug("Stopped")
+        return 180, 45
+
+    def azimuth(self, new_azimuth, speed=SPEED_NORMAL):
+        logger.debug("Azimuth %d (speed %d)", new_azimuth, speed)
+        return new_azimuth
+
+    def elevation(self, new_elevation, speed=SPEED_NORMAL):
+        logger.debug("Elevation %d (speed %d)", new_elevation, speed)
+        return new_elevation
+
 class Controller(object):
     """Control the heliostat. Tries to get the heliostat to a known
     state by issuing a stop command from the constructor.
     """
 
-    def __init__(self, device):
+    def __init__(self, device='/dev/ttyUSB0'):
         self.sends = 0          # Number of messages sent
         self.writes = 0         # Number of port writes (including failed attempts to write)
         self.failed_tries = 0   # Number of times MAX_WRITES exceeded
@@ -123,7 +139,7 @@ class Controller(object):
                 return None
             else:
                 count += 1
-    
+
     def send(self, command):
         """Invoke try_to_write multiple times. If no attempt succeeds,
         try to stop the heliostat, and finally raise an exception.
@@ -148,13 +164,17 @@ class Controller(object):
         self.report_stats()
         raise RuntimeError("Failed to send command")
 
-    def stop(self):
+    def send_stop(self):
         """Stop the heliostat."""
         logger.info("Stop")
         command = self.encoder.stop()
         return self.send(command)
 
-    def azimuth(self, new_azimuth, speed=SPEED_NORMAL):
+    def stop(self):
+        response = self.send_stop()
+        return (response['azimuth'], response['elevation'])
+
+    def send_azimuth(self, new_azimuth, speed):
         """Rotate the heliostat to a new azimuth."""
         logger.info("Change azimuth to %d", new_azimuth)
         command = self.encoder.azimuth(new_azimuth, speed)
@@ -169,7 +189,11 @@ class Controller(object):
         self.stop()
         return response
 
-    def elevation(self, new_elevation, speed=SPEED_NORMAL):
+    def azimuth(self, new_azimuth, speed=SPEED_NORMAL):
+        response = self.send_azimuth(new_azimuth, speed)
+        return response['azimuth']
+
+    def send_elevation(self, new_elevation, speed):
         """Tip the heliostat to a new elevation."""
         logger.info("Change elevation to %d", new_elevation)
         command = self.encoder.elevation(new_elevation, speed)
@@ -183,6 +207,10 @@ class Controller(object):
                 time.sleep(SLEEP_BETWEEN_CHECKS)
         self.stop()
         return response
+
+    def elevation(self, new_elevation, speed=SPEED_NORMAL):
+        response = self.send_elevation(new_elevation, speed)
+        return response['elevation']
 
 logger.info("Azimuth range %d-%d", AZIMUTH_MIN, AZIMUTH_MAX)
 logger.info("Elevation range %d-%d", ELEVATION_MIN, ELEVATION_MAX)
