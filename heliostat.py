@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 ## Device limits
 SPEED_MIN = 0x0a
-SPEED_MAX = 0x14
+SPEED_MAX = 0x15
 AZIMUTH_MIN = 90		# These are close to magnetic headings.
 AZIMUTH_MAX = 270
 ELEVATION_MIN = 0x15
@@ -28,7 +28,7 @@ MAX_SENDS = 10                  # Max times to try to send command before raisin
 MAX_WRITES = 50                 # Max times to try to write command to port
 RESPONSE_LEN = 11               # Length of response packet
 SLEEP_BETWEEN_CHECKS = 3.0      # Seconds to sleep between checks for repositioned heliostat
-SPEED_NORMAL = 0x12             # Normal speed
+SPEED_NORMAL = 0x15             # Normal speed
 SYNC_BYTE = 0x41                # Synchronization byte
 WRITE_TIMEOUT = 0.030           # Seconds after which port write will time out
 
@@ -181,12 +181,13 @@ class Controller(object):
         in_position = False
         while not in_position:
             response = self.send(command)
-            logger.debug("Azimuth now %d", response['azimuth'])
+            logger.debug("AZ %d", response['azimuth'])
             if response['azimuth'] == new_azimuth:
                 in_position = True
             else:
                 time.sleep(SLEEP_BETWEEN_CHECKS)
         self.stop()
+        logger.info("Azimuth now %d", response['azimuth'])
         return response
 
     def azimuth(self, new_azimuth, speed=SPEED_NORMAL):
@@ -200,12 +201,13 @@ class Controller(object):
         in_position = False
         while not in_position:
             response = self.send(command)
-            logger.debug("Elevation now %d", response['elevation'])
+            logger.debug("EL %d", response['elevation'])
             if response['elevation'] == new_elevation:
                 in_position = True
             else:
                 time.sleep(SLEEP_BETWEEN_CHECKS)
         self.stop()
+        logger.info("Elevation now %d", response['elevation'])
         return response
 
     def elevation(self, new_elevation, speed=SPEED_NORMAL):
@@ -218,6 +220,6 @@ logger.info("Speed range %d-%d", SPEED_MIN, SPEED_MAX)
 
 if __name__ == '__main__':
     controller = Controller('/dev/ttyUSB0')
-    controller.azimuth(148)
-    controller.elevation(65)
+    controller.elevation(60)
+    controller.azimuth(115)
     controller.report_stats()
