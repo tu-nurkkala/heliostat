@@ -63,7 +63,7 @@ class EmpiricalSolarFinder(object):
                         fraction = low_to_when / low_to_high
                     azimuth_adjust = int((high.azimuth - low.azimuth) * fraction)
                     elevation_adjust = int((high.elevation - low.elevation) * fraction)
-                    
+
                     azimuth, elevation = self.observations[idx].position()
 
         return (azimuth + azimuth_adjust + EmpiricalSolarFinder.AZIMUTH_FUDGE_FACTOR,
