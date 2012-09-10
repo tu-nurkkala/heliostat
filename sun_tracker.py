@@ -46,10 +46,8 @@ class EmpiricalSolarFinder(object):
 
         azimuth_adjust = elevation_adjust = 0
 
-        if when < self.observations[0].time:
+        if when < self.observations[0].time or when > self.observations[-1].time:
             azimuth, elevation = self.observations[0].position()
-        elif when > self.observations[-1].time:
-            azimuth, elevation = self.observations[-1].position()
         else:
             for idx in range(len(self.observations) - 1):
                 low, high = self.observations[idx], self.observations[idx + 1]
