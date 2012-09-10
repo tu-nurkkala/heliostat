@@ -7,7 +7,7 @@ parser = argparse.ArgumentParser(description='Mirror mover utility')
 
 parser.add_argument('--azimuth', dest='azimuth', type=int, help='rotate to new azimuth')
 parser.add_argument('--elevation', dest='elevation', type=int, help='tip to new elevation')
-parser.add_argument('--stop', dest='stop', type=bool, help='send stop command')
+parser.add_argument('--stop', dest='stop', action='store_true', help='send stop command')
 
 args = parser.parse_args()
 
