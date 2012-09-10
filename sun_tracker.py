@@ -95,7 +95,9 @@ sun = EmpiricalSolarFinder(jeffs_data)
 while True:
     when = datetime.datetime.now().time()
     azimuth, elevation = sun.find(when)
-    logger.debug("Sun at AZ {0}, EL {1}".format(azimuth, elevation))
+
+    if (cur_azimuth != azimuth or cur_elevation != elevation):
+        logger.info("Sun moved to AZ {0}, EL {1}".format(azimuth, elevation))
 
     if cur_azimuth != azimuth:
         cur_azimuth = controller.azimuth(azimuth)
