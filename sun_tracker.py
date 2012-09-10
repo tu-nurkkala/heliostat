@@ -26,8 +26,8 @@ class Observation(object):
         return self.azimuth, self.elevation
 
 class EmpiricalSolarFinder(object):
-    ELEVATION_FUDGE_FACTOR = -3
-    AZIMUTH_FUDGE_FACTOR = +3
+    ELEVATION_FUDGE_FACTOR = -1
+    AZIMUTH_FUDGE_FACTOR = -13
 
     def __init__(self, observations):
         self.observations = [Observation(*ob) for ob in observations]
@@ -43,6 +43,8 @@ class EmpiricalSolarFinder(object):
             dt1 = datetime.datetime.combine(today, t1)
             dt2 = datetime.datetime.combine(today, t2)
             return (dt2 - dt1).total_seconds()
+
+        azimuth_adjust = elevation_adjust = 0
 
         if when < self.observations[0].time:
             azimuth, elevation = self.observations[0].position()
@@ -95,6 +97,7 @@ sun = EmpiricalSolarFinder(jeffs_data)
 while True:
     when = datetime.datetime.now().time()
     azimuth, elevation = sun.find(when)
+    logger.debug("Sun at AZ {0}, EL {1}".format(azimuth, elevation))
 
     if cur_azimuth != azimuth:
         cur_azimuth = controller.azimuth(azimuth)
