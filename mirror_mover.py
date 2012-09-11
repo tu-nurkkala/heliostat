@@ -13,8 +13,7 @@ args = parser.parse_args()
 
 controller = Controller()
 
-if args.stop is not None:
-    # If the user asks for stop, just stop and be done.
+if args.stop:
     controller.stop()
 else:
     if args.azimuth is not None:
