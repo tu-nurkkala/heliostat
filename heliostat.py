@@ -27,6 +27,7 @@ BAUD_RATE = 38400               # Baud rate for serial connection
 MAX_SENDS = 10                  # Max times to try to send command before raising exception
 MAX_WRITES = 50                 # Max times to try to write command to port
 RESPONSE_LEN = 11               # Length of response packet
+SLEEP_AFTER_FAILED_WRITE = 60   # Seconds to sleep after a failed write to the controller.
 SLEEP_BETWEEN_CHECKS = 3.0      # Seconds to sleep between checks for repositioned heliostat
 SPEED_NORMAL = 0x15             # Normal speed
 SYNC_BYTE = 0x41                # Synchronization byte
@@ -141,28 +142,29 @@ class Controller(object):
                 count += 1
 
     def send(self, command):
-        """Invoke try_to_write multiple times. If no attempt succeeds,
-        try to stop the heliostat, and finally raise an exception.
+        """Invoke try_to_write multiple times. Other methods should
+        use this one to send commands and may assume that the message
+        will be delivered successfully. This a convenient fiction.
 
-        Other methods should use this one to send commands and may
-        assume that the message will be delivered successfully. Of
-        course, if it isn't delivered, the caller won't get control
-        again anyhow, but it's a convenient fiction.
+        In reality, if no attempt succeeds, sleep for a while before
+        trying again.  This should prevent hammering on the heliostat
+        controller but will recover in the event of a communication
+        failure.
         """
-        count = 1
-        while count < MAX_SENDS:
-            response = self.try_to_write(command)
-            if response is not None:
-                self.sends += 1
-                return response
-            else:
-                count += 1
+        while True:
+            count = 1
+            while count < MAX_SENDS:
+                response = self.try_to_write(command)
+                if response is not None:
+                    self.sends += 1
+                    return response
+                else:
+                    count += 1
 
-        logger.error("Failed to send command")
-        self.stop()             # Last ditch effort
-        self.stop()
-        self.report_stats()
-        raise RuntimeError("Failed to send command")
+            logger.error("Failed to send command")
+            self.report_stats()
+            logger.debug("Sleeping %ds", SLEEP_AFTER_FAILED_WRITE)
+            time.sleep(SLEEP_AFTER_FAILED_WRITE)
 
     def send_stop(self):
         """Stop the heliostat."""

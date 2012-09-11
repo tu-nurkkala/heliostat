@@ -13,7 +13,7 @@ args = parser.parse_args()
 
 controller = Controller()
 
-if args.stop is not None:
+if args.stop:
     # If the user asks for stop, just stop and be done.
     controller.stop()
 else:
