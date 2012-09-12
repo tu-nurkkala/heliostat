@@ -6,8 +6,11 @@ from __future__ import division
 import datetime
 import time
 
-from heliostat import Controller, MockController
 import astral
+
+from heliostat import Controller, MockController
+from heliostat import AZIMUTH_MIN, AZIMUTH_MAX, ELEVATION_MIN, ELEVATION_MAX
+from util import clamp
 
 import logging
 logger = logging.getLogger(__name__)
@@ -103,20 +106,33 @@ class AstralSolarFinder(object):
         
     def find(self):
         def mirror_elevation(solar_elevation):
+            """Convert solar elevation to the elevation value for the mirror."""
             return solar_elevation / 2 + 45
-        azimuth = int(self.location.solar_azimuth())
-        elevation = int(mirror_elevation(self.location.solar_elevation()))
-        logger.debug("AZ %d, EL %d", azimuth, elevation)
+
+        true_azimuth = int(self.location.solar_azimuth())
+        azimuth = clamp(true_azimuth, AZIMUTH_MIN, AZIMUTH_MAX)
+
+        true_elevation = int(mirror_elevation(self.location.solar_elevation()))
+        elevation = clamp(true_elevation, ELEVATION_MIN, ELEVATION_MAX)
+
+        msge = [ ]
+        msge.append("AZ {0:d}".format(azimuth))
+        if true_azimuth != azimuth:
+            msge.append(" ({0:d} true)".format(true_azimuth))
+        msge.append(" EL {0:d}".format(elevation))
+        if true_elevation != elevation:
+            msge.append(" ({0:d} true)".format(true_elevation))
+        logger.debug("".join(msge))
+
         return (azimuth, elevation)
 
 def main(controller):
-    cur_azimuth, cur_elevation = controller.stop()
-
     sun = EmpiricalSolarFinder(jeffs_data)
 
     upland = astral.City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
     sol = AstralSolarFinder(upland)
 
+    cur_azimuth, cur_elevation = controller.stop()
     while True:
         # when = datetime.datetime.now().time()
         # azimuth, elevation = sun.find(when)
@@ -135,10 +151,10 @@ def main(controller):
         time.sleep(SLEEP_TIME)
 
 try:
-    controller = Controller()
+    controller = MockController()
     main(controller)
 except KeyboardInterrupt:
-    print "\nCaught keyboard interrupt; sending stop comand."
+    logger.info("Caught keyboard interrupt; sending stop comand.")
     controller.stop()
 finally:
     controller.report_stats()

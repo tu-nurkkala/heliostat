@@ -5,6 +5,8 @@ import serial
 import struct
 import time
 
+from util import clamp
+
 logging.basicConfig(format="[%(asctime)s] %(levelname)s %(filename)s(%(lineno)d) %(message)s",
                     level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -12,7 +14,7 @@ logger = logging.getLogger(__name__)
 ## Device limits
 SPEED_MIN = 10
 SPEED_MAX = 21
-AZIMUTH_MIN = 111               # Hard limit ~115
+AZIMUTH_MIN = 125               # Hard limit ~115
 AZIMUTH_MAX = 215               # Hard limit ~224
 ELEVATION_MIN = 45              # Hard limit ~41
 ELEVATION_MAX = 70              # Hard limit ~75
@@ -30,7 +32,7 @@ MAX_WRITES = 50                 # Max times to try to write command to port
 RESPONSE_LEN = 11               # Length of response packet
 SLEEP_AFTER_FAILED_WRITE = 60   # Seconds to sleep after a failed write to the controller.
 SLEEP_BETWEEN_CHECKS = 3.0      # Seconds to sleep between checks for repositioned heliostat
-SPEED_NORMAL = 0x15             # Normal speed
+SPEED_NORMAL = 21               # Normal speed
 SYNC_BYTE = 0x41                # Synchronization byte
 WIGGLE_AZ_DELTA = 10            # Number of degrees to wiggle azimuth.
 WIGGLE_EL_DELTA = 3             # Number of degrees to wiggle elevation.
@@ -91,12 +93,16 @@ class MockController(object):
         return 180, 45
 
     def azimuth(self, new_azimuth, speed=SPEED_NORMAL):
-        logger.debug("Azimuth %d (speed %d)", new_azimuth, speed)
+        logger.debug("Azimuth %d, speed %d", new_azimuth, speed)
         return new_azimuth
 
     def elevation(self, new_elevation, speed=SPEED_NORMAL):
-        logger.debug("Elevation %d (speed %d)", new_elevation, speed)
+        logger.debug("Elevation %d, speed %d", new_elevation, speed)
         return new_elevation
+
+    def report_stats(self):
+        logger.debug("Report statistics.")
+
 
 class Controller(object):
     """Control the heliostat. Tries to get the heliostat to a known
@@ -217,10 +223,6 @@ class Controller(object):
         assert(which_metric in ('azimuth', 'elevation'))
         logger.info("Was trying to make %s %d; wiggling", which_metric, expected_value)
 
-        def clamp(value, low_bound, high_bound):
-            """Clamp value to be between low and high bound (inclusive)."""
-            return max(low_bound, min(value, high_bound))
-            
         current_state = self.send(self.encoder.stop())
         current_value = current_state[which_metric]
         logger.info("Current %s %d", which_metric, current_value)
@@ -248,14 +250,14 @@ class Controller(object):
 
     def azimuth(self, new_azimuth, speed=SPEED_NORMAL):
         """Rotate the heliostat to a new azimuth."""
-        logger.info("Change azimuth to %d", new_azimuth)
+        logger.info("Change azimuth to %d, speed %d", new_azimuth, speed)
         command = self.encoder.azimuth(new_azimuth, speed)
         response = self.send_and_wait(command, 'azimuth', new_azimuth)
         return response['azimuth']
 
     def elevation(self, new_elevation, speed=SPEED_NORMAL):
         """Tip the heliostat to a new elevation."""
-        logger.info("Change elevation to %d", new_elevation)
+        logger.info("Change elevation to %d, speed %d", new_elevation, speed)
         command = self.encoder.elevation(new_elevation, speed)
         response = self.send_and_wait(command, 'elevation', new_elevation)
         return response['elevation']
