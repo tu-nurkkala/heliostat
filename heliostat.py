@@ -10,12 +10,12 @@ logging.basicConfig(format="[%(asctime)s] %(levelname)s %(filename)s(%(lineno)d)
 logger = logging.getLogger(__name__)
 
 ## Device limits
-SPEED_MIN = 0x0a
-SPEED_MAX = 0x15
-AZIMUTH_MIN = 90		# These are close to magnetic headings.
-AZIMUTH_MAX = 270
-ELEVATION_MIN = 0x15
-ELEVATION_MAX = 0x5a
+SPEED_MIN = 10
+SPEED_MAX = 21
+AZIMUTH_MIN = 111               # Hard limit ~115
+AZIMUTH_MAX = 215               # Hard limit ~224
+ELEVATION_MIN = 45              # Hard limit ~41
+ELEVATION_MAX = 70              # Hard limit ~75
 
 ## Command bytes
 AZIMUTH_CMD = 0x10
@@ -24,7 +24,7 @@ STOP_CMD = 0x55
 
 ## Constants
 BAUD_RATE = 38400               # Baud rate for serial connection
-MAX_CHECKS_BEFORE_WIGGLE = 3    # Max checks for repositioned heliostat before wiggling.
+MAX_CHECKS_BEFORE_WIGGLE = 7    # Max checks for repositioned heliostat before wiggling.
 MAX_SENDS = 10                  # Max times to try to send command before raising exception
 MAX_WRITES = 50                 # Max times to try to write command to port
 RESPONSE_LEN = 11               # Length of response packet
@@ -199,6 +199,7 @@ class Controller(object):
                 if may_wiggle:
                     self.wiggle(which_metric, expected_value)
                     check_count = 0
+                    logger.info("Done wiggling; resume %s to %d", which_metric, expected_value)
                 else:
                     logger.debug("Wiggling disabled; giving up.")
                     return response

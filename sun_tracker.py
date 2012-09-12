@@ -1,12 +1,15 @@
-#!/usr/bin/env python2
+
+# -*- coding: utf-8 -*-
 
 from __future__ import division
 
-from heliostat import Controller, MockController
 import datetime
 import time
-import logging
 
+from heliostat import Controller, MockController
+import astral
+
+import logging
 logger = logging.getLogger(__name__)
 
 SLEEP_TIME = 60                 # Sleep time in seconds
@@ -64,8 +67,12 @@ class EmpiricalSolarFinder(object):
 
                     azimuth, elevation = self.observations[idx].position()
 
-        return (azimuth + azimuth_adjust + EmpiricalSolarFinder.AZIMUTH_FUDGE_FACTOR,
-                elevation + elevation_adjust + EmpiricalSolarFinder.ELEVATION_FUDGE_FACTOR)
+            azimuth = azimuth + azimuth_adjust + EmpiricalSolarFinder.AZIMUTH_FUDGE_FACTOR
+            elevation = elevation + elevation_adjust + EmpiricalSolarFinder.ELEVATION_FUDGE_FACTOR
+
+        logger.debug("At %s, AZ %d, EL %d", when, azimuth, elevation)
+        return (azimuth, elevation)
+
 
 ## Data taken by Jeff Dailey, 21-Aug-2012.
 jeffs_data = (
@@ -87,23 +94,51 @@ jeffs_data = (
     ('16:30', 225, 66),
     ('17:00', 228, 63) )
 
-controller = Controller()
-cur_azimuth, cur_elevation = controller.stop()
 
-sun = EmpiricalSolarFinder(jeffs_data)
+class AstralSolarFinder(object):
+    """Finder using the Python Astral package."""
+    def __init__(self, location):
+        logger.debug("Location %s", location)
+        self.location = location
+        
+    def find(self):
+        def mirror_elevation(solar_elevation):
+            return solar_elevation / 2 + 45
+        azimuth = int(self.location.solar_azimuth())
+        elevation = int(mirror_elevation(self.location.solar_elevation()))
+        logger.debug("AZ %d, EL %d", azimuth, elevation)
+        return (azimuth, elevation)
 
-while True:
-    when = datetime.datetime.now().time()
-    azimuth, elevation = sun.find(when)
+def main(controller):
+    cur_azimuth, cur_elevation = controller.stop()
 
-    if (cur_azimuth != azimuth or cur_elevation != elevation):
-        logger.info("Sun moved to AZ {0}, EL {1}".format(azimuth, elevation))
+    sun = EmpiricalSolarFinder(jeffs_data)
 
-    if cur_azimuth != azimuth:
-        cur_azimuth = controller.azimuth(azimuth)
+    upland = astral.City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
+    sol = AstralSolarFinder(upland)
 
-    if cur_elevation != elevation:
-        cur_elevation = controller.elevation(elevation)
+    while True:
+        # when = datetime.datetime.now().time()
+        # azimuth, elevation = sun.find(when)
+        azimuth, elevation = sol.find()
 
-    logger.debug("Sleeping %ds", SLEEP_TIME)
-    time.sleep(SLEEP_TIME)
+        if (cur_azimuth != azimuth or cur_elevation != elevation):
+            logger.info("Sun moved to AZ {0}, EL {1}".format(azimuth, elevation))
+
+        if cur_azimuth != azimuth:
+            cur_azimuth = controller.azimuth(azimuth)
+
+        if cur_elevation != elevation:
+            cur_elevation = controller.elevation(elevation)
+
+        logger.debug("Sleeping %ds", SLEEP_TIME)
+        time.sleep(SLEEP_TIME)
+
+try:
+    controller = Controller()
+    main(controller)
+except KeyboardInterrupt:
+    print "\nCaught keyboard interrupt; sending stop comand."
+    controller.stop()
+finally:
+    controller.report_stats()
