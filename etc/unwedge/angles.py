@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 
+from __future__ import division
 from math import sin, asin, cos, acos, tan, degrees, radians, pi
 import datetime
 
@@ -7,9 +9,10 @@ import datetime
 latitude_angle = radians(40.456)
 print "latitude_angle", latitude_angle
 
-# t_s - Solar timeof observer's location. A 24-hour clock depending on the sun. When sun
+# t_s - Solar time of observer's location. A 24-hour clock depending on the sun. When sun
 # due south, solar time is 12:00.
 solar_time = 11.192
+solar_time = 12
 
 # Omega - Angle between the meridian plane of the observer and the meridian plan that
 # passes throught he sun. In the range [-180, 180] with zero at solar noon (sun at highest
@@ -33,6 +36,10 @@ print
 elevation = asin((sin(solar_declination) * sin(latitude_angle)) +
                  (cos(solar_declination) * cos(hour_angle) * cos(latitude_angle)))
 print "elevation", degrees(elevation)
+
+# 0 = horizontal, 90 = vertical
+mirror_elevation = elevation/2 + pi/4
+print "mirror_elevation", degrees(mirror_elevation)
 
 print
 
@@ -69,3 +76,25 @@ if sin(hour_angle) > 0:
 else:
     azimuth2 = azimuth2
 print "azimuth2", degrees(azimuth2)
+
+print
+
+import astral
+
+upland = astral.City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
+print upland
+print "Dawn", upland.dawn()
+print "Solar noon", upland.solar_noon()
+
+print
+when = datetime.datetime(2012, 6, 21, 11, 00, tzinfo=upland.tz)
+print when
+noon = upland.solar_noon(when)
+print "Solar noon", noon
+print "AZ", upland.solar_azimuth(noon)
+print "EL", upland.solar_elevation(noon)
+
+print
+print "Now"
+print "AZ", upland.solar_azimuth()
+print "EL", upland.solar_elevation()
