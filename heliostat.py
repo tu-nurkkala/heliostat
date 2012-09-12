@@ -24,6 +24,7 @@ STOP_CMD = 0x55
 
 ## Constants
 BAUD_RATE = 38400               # Baud rate for serial connection
+MAX_CHECKS_BEFORE_WIGGLE = 3    # Max checks for repositioned heliostat before wiggling.
 MAX_SENDS = 10                  # Max times to try to send command before raising exception
 MAX_WRITES = 50                 # Max times to try to write command to port
 RESPONSE_LEN = 11               # Length of response packet
@@ -31,6 +32,8 @@ SLEEP_AFTER_FAILED_WRITE = 60   # Seconds to sleep after a failed write to the c
 SLEEP_BETWEEN_CHECKS = 3.0      # Seconds to sleep between checks for repositioned heliostat
 SPEED_NORMAL = 0x15             # Normal speed
 SYNC_BYTE = 0x41                # Synchronization byte
+WIGGLE_AZ_DELTA = 10            # Number of degrees to wiggle azimuth.
+WIGGLE_EL_DELTA = 3             # Number of degrees to wiggle elevation.
 WRITE_TIMEOUT = 0.030           # Seconds after which port write will time out
 
 class Encoder(struct.Struct):
@@ -40,17 +43,17 @@ class Encoder(struct.Struct):
 
     def _validate_speed(self, speed):
         if not SPEED_MIN <= speed <= SPEED_MAX:
-            raise RuntimeError("Speed {0} out of bounds {1}-{2}".format(speed, SPEED_MIN, SPEED_MAX))
+            raise ValueError("Speed {0} out of bounds {1}-{2}".format(speed, SPEED_MIN, SPEED_MAX))
 
     def azimuth(self, value, speed):
         if not AZIMUTH_MIN <= value <= AZIMUTH_MAX:
-            raise RuntimeError("Azimuth {0} out of bounds {1}-{2}".format(value, AZIMUTH_MIN, AZIMUTH_MAX))
+            raise ValueError("Azimuth {0} out of bounds {1}-{2}".format(value, AZIMUTH_MIN, AZIMUTH_MAX))
         self._validate_speed(speed)
         return self.pack(SYNC_BYTE, SYNC_BYTE, SYNC_BYTE, value, speed, 0, 0, AZIMUTH_CMD)
 
     def elevation(self, value, speed):
         if not ELEVATION_MIN <= value <= ELEVATION_MAX:
-            raise RuntimeError("Azimuth {0} out of bounds {1}-{2}".format(value, ELEVATION_MIN, ELEVATION_MAX))
+            raise ValueError("Azimuth {0} out of bounds {1}-{2}".format(value, ELEVATION_MIN, ELEVATION_MAX))
         self._validate_speed(speed)
         return self.pack(SYNC_BYTE, SYNC_BYTE, SYNC_BYTE, 0, 0, value, speed, ELEVATION_CMD)
 
@@ -166,54 +169,94 @@ class Controller(object):
             logger.debug("Sleeping %ds", SLEEP_AFTER_FAILED_WRITE)
             time.sleep(SLEEP_AFTER_FAILED_WRITE)
 
-    def send_stop(self):
+    def send_and_wait(self, command, which_metric, expected_value, may_wiggle=True):
+        """Send a command and wait for the given metric to reach an
+        expected value.
+        """
+        assert(which_metric in ('azimuth', 'elevation'))
+        metric_name = which_metric.capitalize()
+
+        check_count = 0
+        previous_value = current_value = -1
+        while current_value != expected_value:
+            if check_count < MAX_CHECKS_BEFORE_WIGGLE:
+                response = self.send(command)
+                current_value = response[which_metric]
+                logger.info("%s %d", metric_name, current_value)
+
+                if current_value != expected_value:
+                    # Not there yet
+                    if current_value == previous_value:
+                        # In the same place as last check
+                        check_count += 1
+                    else:
+                        # Moved since last check
+                        previous_value = current_value
+                        check_count = 0
+                    time.sleep(SLEEP_BETWEEN_CHECKS)
+            else:
+                logger.warning("Exceeded maximum checks")
+                if may_wiggle:
+                    self.wiggle(which_metric, expected_value)
+                    check_count = 0
+                else:
+                    logger.debug("Wiggling disabled; giving up.")
+                    return response
+        self.stop()
+        logger.info("%s now %d", metric_name, response[which_metric])
+        return response
+
+    def wiggle(self, which_metric, expected_value):
+        """When we detect that the mirror isn't moving as expected,
+        this method attempts to "dislodge" the mirror.
+
+        Initial strategy is to move the mirror in the opposite
+        direction that it was trying to move when it got "stuck."
+        """
+        assert(which_metric in ('azimuth', 'elevation'))
+        logger.info("Was trying to make %s %d; wiggling", which_metric, expected_value)
+
+        def clamp(value, low_bound, high_bound):
+            """Clamp value to be between low and high bound (inclusive)."""
+            return max(low_bound, min(value, high_bound))
+            
+        current_state = self.send(self.encoder.stop())
+        current_value = current_state[which_metric]
+        logger.info("Current %s %d", which_metric, current_value)
+
+        # This may seem backwards, but we want to "wiggle" the mirror
+        # in the opposite direction that we've been trying to move.
+        sign = -1 if current_value < expected_value else +1
+
+        if which_metric == 'azimuth':
+            wiggle_value = clamp(current_value + (WIGGLE_AZ_DELTA * sign), AZIMUTH_MIN, AZIMUTH_MAX)
+            command = self.encoder.azimuth(wiggle_value, SPEED_NORMAL)
+        else:
+            wiggle_value = clamp(current_value + (WIGGLE_EL_DELTA * sign), ELEVATION_MIN, ELEVATION_MAX)
+            command = self.encoder.elevation(wiggle_value, SPEED_NORMAL)
+
+        logger.info("Wiggle %s to %d", which_metric, wiggle_value)
+        self.send_and_wait(command, which_metric, wiggle_value, may_wiggle=False)
+        
+    def stop(self):
         """Stop the heliostat."""
         logger.info("Stop")
         command = self.encoder.stop()
-        return self.send(command)
-
-    def stop(self):
-        response = self.send_stop()
+        response = self.send(command)
         return (response['azimuth'], response['elevation'])
 
-    def send_azimuth(self, new_azimuth, speed):
+    def azimuth(self, new_azimuth, speed=SPEED_NORMAL):
         """Rotate the heliostat to a new azimuth."""
         logger.info("Change azimuth to %d", new_azimuth)
         command = self.encoder.azimuth(new_azimuth, speed)
-        in_position = False
-        while not in_position:
-            response = self.send(command)
-            logger.debug("AZ %d", response['azimuth'])
-            if response['azimuth'] == new_azimuth:
-                in_position = True
-            else:
-                time.sleep(SLEEP_BETWEEN_CHECKS)
-        self.stop()
-        logger.info("Azimuth now %d", response['azimuth'])
-        return response
-
-    def azimuth(self, new_azimuth, speed=SPEED_NORMAL):
-        response = self.send_azimuth(new_azimuth, speed)
+        response = self.send_and_wait(command, 'azimuth', new_azimuth)
         return response['azimuth']
 
-    def send_elevation(self, new_elevation, speed):
+    def elevation(self, new_elevation, speed=SPEED_NORMAL):
         """Tip the heliostat to a new elevation."""
         logger.info("Change elevation to %d", new_elevation)
         command = self.encoder.elevation(new_elevation, speed)
-        in_position = False
-        while not in_position:
-            response = self.send(command)
-            logger.debug("EL %d", response['elevation'])
-            if response['elevation'] == new_elevation:
-                in_position = True
-            else:
-                time.sleep(SLEEP_BETWEEN_CHECKS)
-        self.stop()
-        logger.info("Elevation now %d", response['elevation'])
-        return response
-
-    def elevation(self, new_elevation, speed=SPEED_NORMAL):
-        response = self.send_elevation(new_elevation, speed)
+        response = self.send_and_wait(command, 'elevation', new_elevation)
         return response['elevation']
 
 logger.info("Azimuth range %d-%d", AZIMUTH_MIN, AZIMUTH_MAX)
