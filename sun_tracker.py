@@ -151,7 +151,7 @@ def main(controller):
         time.sleep(SLEEP_TIME)
 
 try:
-    controller = MockController()
+    controller = Controller()
     main(controller)
 except KeyboardInterrupt:
     logger.info("Caught keyboard interrupt; sending stop comand.")
