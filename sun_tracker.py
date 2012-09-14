@@ -100,19 +100,20 @@ jeffs_data = (
 
 class AstralSolarFinder(object):
     """Finder using the Python Astral package."""
-    def __init__(self, location):
+    def __init__(self, location, magnetic_declination):
         logger.debug("Location %s", location)
         self.location = location
+        self.magnetic_declination = magnetic_declination
         
-    def find(self):
+    def find(self, when):
         def mirror_elevation(solar_elevation):
             """Convert solar elevation to the elevation value for the mirror."""
             return solar_elevation / 2 + 45
 
-        true_azimuth = int(self.location.solar_azimuth())
+        true_azimuth = int(self.location.solar_azimuth(when) + self.magnetic_declination)
         azimuth = clamp(true_azimuth, AZIMUTH_MIN, AZIMUTH_MAX)
 
-        true_elevation = int(mirror_elevation(self.location.solar_elevation()))
+        true_elevation = int(mirror_elevation(self.location.solar_elevation(when)))
         elevation = clamp(true_elevation, ELEVATION_MIN, ELEVATION_MAX)
 
         msge = [ ]
@@ -130,13 +131,17 @@ def main(controller):
     sun = EmpiricalSolarFinder(jeffs_data)
 
     upland = astral.City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
-    sol = AstralSolarFinder(upland)
+    upland_magnetic_declination = 5.1059
+    sol = AstralSolarFinder(upland, upland_magnetic_declination)
 
     cur_azimuth, cur_elevation = controller.stop()
     while True:
-        # when = datetime.datetime.now().time()
-        # azimuth, elevation = sun.find(when)
-        azimuth, elevation = sol.find()
+        when = datetime.datetime.now(tz=upland.tz)
+        azimuth, elevation = sun.find(when.time())
+        logger.debug("SUN AZ {0} EL {1}".format(azimuth, elevation))
+        
+        sol_azimuth, sol_elevation = sol.find(when)
+        logger.debug("SOL AZ {0} EL {1}".format(sol_azimuth, sol_elevation))
 
         if (cur_azimuth != azimuth or cur_elevation != elevation):
             logger.info("Sun moved to AZ {0}, EL {1}".format(azimuth, elevation))
@@ -149,6 +154,33 @@ def main(controller):
 
         logger.debug("Sleeping %ds", SLEEP_TIME)
         time.sleep(SLEEP_TIME)
+
+def compare_controllers():
+    sun = EmpiricalSolarFinder(jeffs_data)
+    upland = astral.City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
+    upland_magnetic_declination = 5.1059
+    sol = AstralSolarFinder(upland, upland_magnetic_declination)
+
+    delta = datetime.timedelta(minutes=+5)
+    from_time = datetime.datetime(2012, 8, 21, 0, 0, tzinfo=upland.tz)
+    to_time = datetime.datetime(2012, 8, 22, 0, 0, tzinfo=upland.tz)
+    sunrise = upland.sunrise(from_time)
+    sunset = upland.sunset(from_time)
+    when = from_time
+    while when < to_time:
+        day_night = 'DAY' if sunrise < when < sunset else 'NIGHT'
+        sun_az, sun_el = sun.find(when.time())
+        sol_az, sol_el = sol.find(when)
+        print "{0:%I:%M} - SUN {1:3d} {2:2d} - SOL {3:3d} {4:2d} - DELTA {5:3d} {6:3d} - {7:5s}".format(
+            when,
+            sun_az, sun_el,
+            sol_az, sol_el,
+            sun_az - sol_az, sun_el - sol_el,
+            day_night)
+        when += delta
+
+# compare_controllers()
+# exit(1)
 
 try:
     controller = Controller()

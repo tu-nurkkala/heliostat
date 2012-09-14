@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 ## Device limits
 SPEED_MIN = 10
 SPEED_MAX = 21
-AZIMUTH_MIN = 125               # Hard limit ~115
-AZIMUTH_MAX = 215               # Hard limit ~224
+AZIMUTH_MIN = 120               # Hard limit ~115
+AZIMUTH_MAX = 220               # Hard limit ~224
 ELEVATION_MIN = 45              # Hard limit ~41
-ELEVATION_MAX = 70              # Hard limit ~75
+ELEVATION_MAX = 75              # Hard limit ~75
 
 ## Command bytes
 AZIMUTH_CMD = 0x10
