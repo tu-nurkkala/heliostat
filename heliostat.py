@@ -19,6 +19,9 @@ AZIMUTH_MAX = 220               # Hard limit ~224
 ELEVATION_MIN = 45              # Hard limit ~41
 ELEVATION_MAX = 75              # Hard limit ~75
 
+AZIMUTH_FIX = +1
+ELEVATION_FIX = -6
+
 ## Command bytes
 AZIMUTH_CMD = 0x10
 ELEVATION_CMD = 0x20
@@ -250,6 +253,7 @@ class Controller(object):
 
     def azimuth(self, new_azimuth, speed=SPEED_NORMAL):
         """Rotate the heliostat to a new azimuth."""
+	new_azimuth += AZIMUTH_FIX
         logger.info("Change azimuth to %d, speed %d", new_azimuth, speed)
         command = self.encoder.azimuth(new_azimuth, speed)
         response = self.send_and_wait(command, 'azimuth', new_azimuth)
@@ -257,6 +261,7 @@ class Controller(object):
 
     def elevation(self, new_elevation, speed=SPEED_NORMAL):
         """Tip the heliostat to a new elevation."""
+        new_elevation += ELEVATION_FIX
         logger.info("Change elevation to %d, speed %d", new_elevation, speed)
         command = self.encoder.elevation(new_elevation, speed)
         response = self.send_and_wait(command, 'elevation', new_elevation)
