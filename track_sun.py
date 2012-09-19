@@ -5,10 +5,8 @@ import time
 
 from astral import City
 
-from heliostat import Controller, MockController
+from heliostat import Controller, clamp_azimuth_elevation
 from solar_finders import AstralSolarFinder, EmpiricalSolarFinder
-from heliostat import AZIMUTH_MIN, AZIMUTH_MAX, ELEVATION_MIN, ELEVATION_MAX
-from util import clamp
 
 import logging
 logger = logging.getLogger(__name__)
@@ -40,8 +38,8 @@ def track(controller, finder):
     while True:
         location = City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
         when = datetime.datetime.now(tz=location.tz)
-        azimuth, elevation = finder.find(when)
-        logger.debug("AZ {0} EL {1}".format(azimuth, elevation))
+        azimuth, elevation = clamp_azimuth_elevation(*finder.find(when))
+        logger.debug("Current AZ {0} EL {1}".format(azimuth, elevation))
         
         if (cur_azimuth != azimuth or cur_elevation != elevation):
             logger.info("Sun moved to AZ {0}, EL {1}".format(azimuth, elevation))
@@ -70,10 +68,8 @@ controller = Controller()
 if args.finder == 'analytic':
     upland = City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
     finder = AstralSolarFinder(upland)
-
 elif args.finder == 'empirical':
     finder = EmpiricalSolarFinder(jeffs_data)
-
 else:
     raise ValueError("Invalid finder '%s'", args.finder)
 

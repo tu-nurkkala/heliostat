@@ -3,11 +3,9 @@ from __future__ import division
 import datetime
 import time
 
-from astral import City
+MAGNETIC_DECLINATION = 5.1      # Declination in degrees at Upland
 
-from heliostat import Controller, MockController
-from heliostat import AZIMUTH_MIN, AZIMUTH_MAX, ELEVATION_MIN, ELEVATION_MAX
-from util import clamp
+from astral import City
 
 import logging
 logger = logging.getLogger(__name__)
@@ -27,11 +25,6 @@ class Observation(object):
         return self.azimuth, self.elevation
 
 class EmpiricalSolarFinder(object):
-    # ELEVATION_FUDGE_FACTOR = -1
-    # AZIMUTH_FUDGE_FACTOR = -13
-    ELEVATION_FUDGE_FACTOR = 0
-    AZIMUTH_FUDGE_FACTOR = 0
-
     def __init__(self, observations):
         self.observations = [Observation(*ob) for ob in observations]
 
@@ -68,36 +61,50 @@ class EmpiricalSolarFinder(object):
 
                     azimuth, elevation = self.observations[idx].position()
 
-            azimuth = azimuth + azimuth_adjust + EmpiricalSolarFinder.AZIMUTH_FUDGE_FACTOR
-            elevation = elevation + elevation_adjust + EmpiricalSolarFinder.ELEVATION_FUDGE_FACTOR
+            azimuth = azimuth + azimuth_adjust
+            elevation = elevation + elevation_adjust
 
         return (azimuth, elevation)
 
 class AstralSolarFinder(object):
     """Finder using the Python Astral package."""
     def __init__(self, location):
-        logger.debug("Location %s", location)
+        logger.info("Location %s", location)
         self.location = location
-        
+
     def find(self, when):
         def mirror_elevation(solar_elevation):
             """Convert solar elevation to the elevation value for the mirror."""
             return 90 - ((90 - solar_elevation) / 2)
 
+        def minutes_since_start(when):
+            """Return the number of minutes from the start time (09:00) until time when."""
+            first_sample = when.replace(hour=9, minute=0)
+            delta_seconds = (when - first_sample).total_seconds()
+            return delta_seconds / 60
+
+        def azimuth_correction(when):
+            """Return the azimuth correction at time when.  This is a
+            piecewise linear apporoximation based on Jeff's data.
+            """
+            minutes = minutes_since_start(when)
+            if minutes > 300:
+                minutes -= 300
+                m = -(4/180)
+                b = -29
+            else:
+                m = -(65/480)
+                b = 32
+
+            return m * minutes + b
+            
+        def elevation_correction(when):
+            """Return the elevation correction at time when. Also based on Jeff's data."""
+            m = (12/480)
+            b = -7
+            return m * minutes_since_start(when) + b
+
         when = when.replace(tzinfo=self.location.tz)
-        true_azimuth = int(self.location.solar_azimuth(when))
-        azimuth = clamp(true_azimuth, AZIMUTH_MIN, AZIMUTH_MAX)
-
-        true_elevation = int(self.location.solar_elevation(when))
-        elevation = clamp(int(mirror_elevation(true_elevation)), ELEVATION_MIN, ELEVATION_MAX)
-
-        msge = [ ]
-        msge.append("AZ {0:d}".format(azimuth))
-        if true_azimuth != azimuth:
-            msge.append(" ({0:d} true)".format(true_azimuth))
-        msge.append(" EL {0:d}".format(elevation))
-        if true_elevation != elevation:
-            msge.append(" ({0:d} true)".format(true_elevation))
-        logger.debug("".join(msge))
-
+        azimuth = int(self.location.solar_azimuth(when) + azimuth_correction(when) + MAGNETIC_DECLINATION)
+        elevation = int(mirror_elevation(self.location.solar_elevation(when)) + elevation_correction(when))
         return (azimuth, elevation)

@@ -5,8 +5,6 @@ import serial
 import struct
 import time
 
-from util import clamp
-
 logging.basicConfig(format="[%(asctime)s] %(levelname)s %(filename)s(%(lineno)d) %(message)s",
                     level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -18,9 +16,6 @@ AZIMUTH_MIN = 120               # Hard limit ~115
 AZIMUTH_MAX = 220               # Hard limit ~224
 ELEVATION_MIN = 45              # Hard limit ~41
 ELEVATION_MAX = 75              # Hard limit ~75
-
-AZIMUTH_FIX = +1
-ELEVATION_FIX = -6
 
 ## Command bytes
 AZIMUTH_CMD = 0x10
@@ -40,6 +35,14 @@ SYNC_BYTE = 0x41                # Synchronization byte
 WIGGLE_AZ_DELTA = 10            # Number of degrees to wiggle azimuth.
 WIGGLE_EL_DELTA = 3             # Number of degrees to wiggle elevation.
 WRITE_TIMEOUT = 0.030           # Seconds after which port write will time out
+
+def clamp(value, low_bound, high_bound):
+    """Clamp value to be between low and high bound (inclusive)."""
+    return max(low_bound, min(value, high_bound))
+
+def clamp_azimuth_elevation(azimuth, elevation):
+    return (clamp(azimuth, AZIMUTH_MIN, AZIMUTH_MAX),
+            clamp(elevation, ELEVATION_MIN, ELEVATION_MAX))
 
 class Encoder(struct.Struct):
     """Encode a command packet to be written to the controller."""
@@ -223,6 +226,7 @@ class Controller(object):
         Initial strategy is to move the mirror in the opposite
         direction that it was trying to move when it got "stuck."
         """
+
         assert(which_metric in ('azimuth', 'elevation'))
         logger.info("Was trying to make %s %d; wiggling", which_metric, expected_value)
 
@@ -253,7 +257,6 @@ class Controller(object):
 
     def azimuth(self, new_azimuth, speed=SPEED_NORMAL):
         """Rotate the heliostat to a new azimuth."""
-	new_azimuth += AZIMUTH_FIX
         logger.info("Change azimuth to %d, speed %d", new_azimuth, speed)
         command = self.encoder.azimuth(new_azimuth, speed)
         response = self.send_and_wait(command, 'azimuth', new_azimuth)
@@ -261,7 +264,6 @@ class Controller(object):
 
     def elevation(self, new_elevation, speed=SPEED_NORMAL):
         """Tip the heliostat to a new elevation."""
-        new_elevation += ELEVATION_FIX
         logger.info("Change elevation to %d, speed %d", new_elevation, speed)
         command = self.encoder.elevation(new_elevation, speed)
         response = self.send_and_wait(command, 'elevation', new_elevation)

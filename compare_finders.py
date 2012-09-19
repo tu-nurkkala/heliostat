@@ -1,8 +1,30 @@
 # -*- coding: utf-8 -*-
 
+from astral import City
 from solar_finders import AstralSolarFinder, EmpiricalSolarFinder
+import datetime
 
-def compare_controllers():
+## Data taken by Jeff Dailey, 21-Aug-2012.
+jeffs_data = (
+    ('09:08', 135, 56),         # Time, azimuth, elevation
+    ('09:30', 137, 57),
+    ('10:00', 141, 60),
+    ('10:30', 144, 63),
+    ('11:00', 148, 65),
+    ('11:30', 152, 68),
+    ('12:00', 157, 70),
+    ('12:30', 163, 72),
+    ('13:00', 169, 73),
+    ('13:30', 178, 74),
+    ('14:00', 186, 74),
+    ('14:30', 196, 73),
+    ('15:00', 208, 71),
+    ('15:30', 213, 70),
+    ('16:00', 219, 68),
+    ('16:30', 225, 66),
+    ('17:00', 228, 63) )
+
+def compare_finders():
     sun = EmpiricalSolarFinder(jeffs_data)
     upland = City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
     sol = AstralSolarFinder(upland)
@@ -26,5 +48,5 @@ def compare_controllers():
         when += delta
 
 
-compare_controllers()
+compare_finders()
 
