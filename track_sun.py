@@ -35,11 +35,11 @@ jeffs_data = (
 
 def track(controller, finder):
     cur_azimuth, cur_elevation = controller.stop()
+    location = City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
+
     while True:
-        location = City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
         when = datetime.datetime.now(tz=location.tz)
         azimuth, elevation = clamp_azimuth_elevation(*finder.find(when))
-        logger.debug("Current AZ {0} EL {1}".format(azimuth, elevation))
         
         if (cur_azimuth != azimuth or cur_elevation != elevation):
             logger.info("Sun moved to AZ {0}, EL {1}".format(azimuth, elevation))
@@ -76,7 +76,7 @@ else:
 try:
     track(controller, finder)
 except KeyboardInterrupt:
-    logger.info("Caught keyboard interrupt; sending stop comand.")
+    logger.warning("Caught keyboard interrupt; sending stop comand.")
     controller.stop()
 finally:
     controller.report_stats()

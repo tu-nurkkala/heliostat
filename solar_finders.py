@@ -3,7 +3,7 @@ from __future__ import division
 import datetime
 import time
 
-MAGNETIC_DECLINATION = 5.1      # Declination in degrees at Upland
+MAGNETIC_DECLINATION = 5.1      # Declination in degrees at Upland, September, 2012
 
 from astral import City
 
@@ -71,40 +71,40 @@ class AstralSolarFinder(object):
     def __init__(self, location):
         logger.info("Location %s", location)
         self.location = location
+        self.az_correction = { }
+        self.el_correction = { }
+
+        with open('corrections.csv') as f:
+            for line in f:
+                line.strip()
+                which, astral, empirical = line.split(',')
+                astral = int(astral)
+                empirical = int(empirical)
+                if which == 'AZ':
+                    self.az_correction[astral] = empirical
+                elif which == 'EL':
+                    self.el_correction[astral] = empirical
+                else:
+                    raise ValueError("Invalid type of correction '{0}'".format(which))
 
     def find(self, when):
         def mirror_elevation(solar_elevation):
             """Convert solar elevation to the elevation value for the mirror."""
             return 90 - ((90 - solar_elevation) / 2)
 
-        def minutes_since_start(when):
-            """Return the number of minutes from the start time (09:00) until time when."""
-            first_sample = when.replace(hour=9, minute=0)
-            delta_seconds = (when - first_sample).total_seconds()
-            return delta_seconds / 60
+        def azimuth_correction(raw_az):
+            try:
+                return self.az_correction[int(raw_az)]
+            except KeyError:
+                return raw_az
 
-        def azimuth_correction(when):
-            """Return the azimuth correction at time when.  This is a
-            piecewise linear apporoximation based on Jeff's data.
-            """
-            minutes = minutes_since_start(when)
-            if minutes > 300:
-                minutes -= 300
-                m = -(4/180)
-                b = -29
-            else:
-                m = -(65/480)
-                b = 32
-
-            return m * minutes + b
+        def elevation_correction(raw_el):
+            try:
+                return self.el_correction[int(raw_el)]
+            except KeyError:
+                return raw_el
             
-        def elevation_correction(when):
-            """Return the elevation correction at time when. Also based on Jeff's data."""
-            m = (12/480)
-            b = -7
-            return m * minutes_since_start(when) + b
-
         when = when.replace(tzinfo=self.location.tz)
-        azimuth = int(self.location.solar_azimuth(when) + azimuth_correction(when) + MAGNETIC_DECLINATION)
-        elevation = int(mirror_elevation(self.location.solar_elevation(when)) + elevation_correction(when))
+        azimuth = int(azimuth_correction(self.location.solar_azimuth(when)) + MAGNETIC_DECLINATION)
+        elevation = int(elevation_correction(mirror_elevation(self.location.solar_elevation(when))))
         return (azimuth, elevation)
