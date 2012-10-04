@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 SPEED_MIN = 10
 SPEED_MAX = 21
 AZIMUTH_MIN = 120               # Hard limit ~115
-AZIMUTH_MAX = 220               # Hard limit ~224
+AZIMUTH_MAX = 218               # Hard limit ~224
 ELEVATION_MIN = 45              # Hard limit ~41
 ELEVATION_MAX = 75              # Hard limit ~75
 
