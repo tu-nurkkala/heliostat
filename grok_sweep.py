@@ -35,6 +35,7 @@ for line in fileinput.input():
             print 'ACT AZ', actual_az, 'ACT EL', actual_el
             az_offset[actual_el][requested_az] = actual_az - requested_az
 
+#### Text
 print '  ',
 moving_up = True
 for j in xrange(AZIMUTH_MIN, AZIMUTH_MAX, 3):
@@ -57,4 +58,9 @@ for el in xrange(ELEVATION_MIN, ELEVATION_MAX + 1):
             print '   ',
     print
 
-        
+#### CSV
+print ',', ','.join([str(v) for v in xrange(AZIMUTH_MIN, AZIMUTH_MAX, 3)])
+for el in xrange(ELEVATION_MIN, ELEVATION_MAX + 1):
+    print el, ',', ','.join([ str(az_offset[el][az]) if az_offset[el][az] is not None else ''
+                     for az in xrange(AZIMUTH_MIN, AZIMUTH_MAX + 1, 3)] )
+

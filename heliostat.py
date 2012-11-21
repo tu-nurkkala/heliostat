@@ -83,8 +83,8 @@ class Decoder(struct.Struct):
         temperature = ((temperature * 0.0048875) * 100) - 273.15
         humidity = ((humidity * 0.0048875) - 0.8) * (100 / 3.75)
 
-        response = { 'azimuth': azimuth,
-                     'elevation': elevation,
+        response = { 'azimuth': int(azimuth),
+                     'elevation': int(elevation),
                      'temperature': round(temperature, 2),
                      'humidity': round(humidity, 2) }
 
