@@ -1,5 +1,8 @@
 from heliostat import Controller, AZIMUTH_MIN, AZIMUTH_MAX, ELEVATION_MIN, ELEVATION_MAX
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
 
 parser = argparse.ArgumentParser(description='Sweep mirror to determine magnetic variation')
 
@@ -10,22 +13,26 @@ parser.add_argument('--elmax', dest='elevation_max', type=int, default=ELEVATION
 
 args = parser.parse_args()
 
+DEGREE_STEP = 3
+
 try:
     controller = Controller()
     moving_up = True
 
-    for azimuth in xrange(args.azimuth_min, args.azimuth_max + 1):
+    controller.azimuth(args.azimuth_min)
+    controller.elevation(args.elevation_min)
+
+    for azimuth in xrange(args.azimuth_min, args.azimuth_max, DEGREE_STEP):
+        logger.info("*** MOVING AZIMUTH TO %d", azimuth)
         az, el = controller.azimuth(azimuth)
-        print "AZ", az, el
 
         if moving_up:
-            start, stop, step = args.elevation_min, args.elevation_max, 1
+            elevation = args.elevation_max
         else:
-            start, stop, step = args.elevation_max, args.elevation_min, -1
+            elevation = args.elevation_min
 
-        for elevation in xrange(start, stop, step):
-            az, el = controller.elevation(elevation)
-            print "EL", az, el
+        logger.info("*** MOVING ELEVATION TO %d", elevation)
+        az, el = controller.elevation(elevation)
 
         moving_up = not moving_up
             
