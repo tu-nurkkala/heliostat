@@ -1,4 +1,3 @@
-
 from heliostat import Controller, SPEED_NORMAL
 import argparse
 

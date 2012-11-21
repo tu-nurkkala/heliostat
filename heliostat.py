@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 SPEED_MIN = 10
 SPEED_MAX = 21
 AZIMUTH_MIN = 120               # Hard limit ~115
-AZIMUTH_MAX = 218               # Hard limit ~224
+AZIMUTH_MAX = 215               # Hard limit ~224
 ELEVATION_MIN = 45              # Hard limit ~41
 ELEVATION_MAX = 75              # Hard limit ~75
 
@@ -26,6 +26,7 @@ STOP_CMD = 0x55
 BAUD_RATE = 38400               # Baud rate for serial connection
 MAX_CHECKS_BEFORE_WIGGLE = 7    # Max checks for repositioned heliostat before wiggling.
 MAX_SENDS = 10                  # Max times to try to send command before raising exception
+MAX_WIGGLES = 3                 # Max times to try wiggling
 MAX_WRITES = 50                 # Max times to try to write command to port
 RESPONSE_LEN = 11               # Length of response packet
 SLEEP_AFTER_FAILED_WRITE = 60   # Seconds to sleep after a failed write to the controller.
@@ -38,7 +39,7 @@ WRITE_TIMEOUT = 0.030           # Seconds after which port write will time out
 
 def clamp(value, low_bound, high_bound):
     """Clamp value to be between low and high bound (inclusive)."""
-    return max(low_bound, min(value, high_bound))
+    return int(max(low_bound, min(value, high_bound)))
 
 def clamp_azimuth_elevation(azimuth, elevation):
     return (clamp(azimuth, AZIMUTH_MIN, AZIMUTH_MAX),
@@ -125,7 +126,6 @@ class Controller(object):
         self.decoder = Decoder()
         self.stop()             # Make sure we're stopped before doing anything else.
 
-
     def report_stats(self):
         logger.info("%d commands sent", self.sends)
         logger.info("%d port writes", self.writes)
@@ -188,6 +188,7 @@ class Controller(object):
         assert(which_metric in ('azimuth', 'elevation'))
         metric_name = which_metric.capitalize()
 
+        wiggle_count = 0
         check_count = 0
         previous_value = current_value = -1
         while current_value != expected_value:
@@ -209,9 +210,15 @@ class Controller(object):
             else:
                 logger.warning("Exceeded maximum checks")
                 if may_wiggle:
-                    self.wiggle(which_metric, expected_value)
-                    check_count = 0
-                    logger.info("Done wiggling; resume %s to %d", which_metric, expected_value)
+                    if wiggle_count < MAX_WIGGLES:
+                        self.wiggle(which_metric, expected_value)
+                        wiggle_count += 1
+                        logger.debug("Wiggle count %d", wiggle_count)
+                        check_count = 0
+                        logger.info("Done wiggling; resume %s to %d", which_metric, expected_value)
+                    else:
+                        # Bottomed out with no more recovery options -- bail out.
+                        raise RuntimeError("Too many wiggles; giving up.")
                 else:
                     logger.debug("Wiggling disabled; giving up.")
                     return response
@@ -259,15 +266,15 @@ class Controller(object):
         """Rotate the heliostat to a new azimuth."""
         logger.info("Change azimuth to %d, speed %d", new_azimuth, speed)
         command = self.encoder.azimuth(new_azimuth, speed)
-        response = self.send_and_wait(command, 'azimuth', new_azimuth)
-        return response['azimuth']
+        response = self.send_and_wait(command, 'azimuth', new_azimuth, may_wiggle=True)
+        return (response['azimuth'], response['elevation'])
 
     def elevation(self, new_elevation, speed=SPEED_NORMAL):
         """Tip the heliostat to a new elevation."""
         logger.info("Change elevation to %d, speed %d", new_elevation, speed)
         command = self.encoder.elevation(new_elevation, speed)
-        response = self.send_and_wait(command, 'elevation', new_elevation)
-        return response['elevation']
+        response = self.send_and_wait(command, 'elevation', new_elevation, may_wiggle=True)
+        return (response['azimuth'], response['elevation'])
 
 logger.info("Azimuth range %d-%d", AZIMUTH_MIN, AZIMUTH_MAX)
 logger.info("Elevation range %d-%d", ELEVATION_MIN, ELEVATION_MAX)
