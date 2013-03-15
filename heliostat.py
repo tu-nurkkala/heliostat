@@ -9,13 +9,21 @@ logging.basicConfig(format="[%(asctime)s] %(levelname)s %(filename)s(%(lineno)d)
                     level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+AZ_SPAZ_SLOPE = 2.39960237277
+AZ_SPAZ_INTERCEPT = 84.8400496537
+
 def az_to_spaz(az):
     """Convert compass azmuth to appropriate string pot reading. The
     slope and intercept are based on a linear regression of
     measurements taken by Jeff."""
-    spaz = int((2.39960237277 * az) + 84.8400496537)
+    spaz = int((AZ_SPAZ_SLOPE * az) + AZ_SPAZ_INTERCEPT)
     logger.debug("AZ {0} -> SPAZ {1}".format(az, spaz))
     return spaz
+
+def spaz_to_az(spaz):
+    az = int((spaz - AZ_SPAZ_INTERCEPT) / AZ_SPAZ_SLOPE)
+    logger.debug("SPAZ {0} -> AZ {1}".format(spaz, az))
+    return az
 
 ## Device limits
 SPEED_MIN = 10
@@ -293,7 +301,9 @@ class CompassController(StringPotController):
                 clamp(elevation, ELEVATION_MIN, ELEVATION_MAX))
 
     def azimuth(self, compass_azimuth, speed=SPEED_NORMAL):
-        return super(CompassController, self).azimuth(az_to_spaz(compass_azimuth), speed)
+        az, el = super(CompassController, self).azimuth(az_to_spaz(compass_azimuth), speed)
+        az = spaz_to_az(az)
+        return (az, el)
 
 logger.info("Azimuth range %d-%d", AZIMUTH_MIN, AZIMUTH_MAX)
 logger.info("Elevation range %d-%d", ELEVATION_MIN, ELEVATION_MAX)
