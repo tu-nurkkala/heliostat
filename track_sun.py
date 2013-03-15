@@ -5,7 +5,7 @@ import time
 
 from astral import City
 
-from heliostat import Controller, clamp_azimuth_elevation
+from heliostat import CompassController
 from solar_finders import AstralSolarFinder, EmpiricalSolarFinder
 
 import logging
@@ -39,7 +39,7 @@ def track(controller, finder):
 
     while True:
         when = datetime.datetime.now(tz=location.tz)
-        azimuth, elevation = clamp_azimuth_elevation(*finder.find(when))
+        azimuth, elevation = controller.clamp_azimuth_elevation(*finder.find(when))
         
         if (cur_azimuth != azimuth or cur_elevation != elevation):
             logger.info("Sun moved to AZ {0}, EL {1}".format(azimuth, elevation))
@@ -63,7 +63,7 @@ parser.add_argument('--analytical', action='store_const', const='analytic', dest
                     help='use analytic solar finder')
 args = parser.parse_args()
 
-controller = Controller()
+controller = CompassController()
 
 if args.finder == 'analytic':
     upland = City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))

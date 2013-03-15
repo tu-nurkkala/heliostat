@@ -1,4 +1,4 @@
-from heliostat import Controller, SPEED_NORMAL
+from heliostat import CompassController, SPEED_NORMAL
 import argparse
 
 parser = argparse.ArgumentParser(description='Mirror mover utility')
@@ -9,9 +9,10 @@ parser.add_argument('--stop', dest='stop', action='store_true', help='send stop 
 parser.add_argument('--speed', dest='speed', type=int, default=SPEED_NORMAL, help='set speed')
 
 args = parser.parse_args()
+controller = None
 
 try:
-    controller = Controller()
+    controller = CompassController()
 
     if args.stop:
         controller.stop()

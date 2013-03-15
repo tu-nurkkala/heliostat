@@ -9,11 +9,25 @@ logging.basicConfig(format="[%(asctime)s] %(levelname)s %(filename)s(%(lineno)d)
                     level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+def az_to_spaz(az):
+    """Convert compass azmuth to appropriate string pot reading. The
+    slope and intercept are based on a linear regression of
+    measurements taken by Jeff."""
+    spaz = int((2.39960237277 * az) + 84.8400496537)
+    logger.debug("AZ {0} -> SPAZ {1}".format(az, spaz))
+    return spaz
+
 ## Device limits
 SPEED_MIN = 10
 SPEED_MAX = 21
-AZIMUTH_MIN = 120               # Hard limit ~115
-AZIMUTH_MAX = 215               # Hard limit ~224
+
+COMPASS_AZIMUTH_MIN = 120               # Hard limit ~115
+COMPASS_AZIMUTH_MAX = 215               # Hard limit ~224
+
+# Azimuths now tied to the values read from the string potentiometers.
+AZIMUTH_MIN = az_to_spaz(COMPASS_AZIMUTH_MIN)
+AZIMUTH_MAX = az_to_spaz(COMPASS_AZIMUTH_MAX)
+
 ELEVATION_MIN = 45              # Hard limit ~41
 ELEVATION_MAX = 75              # Hard limit ~75
 
@@ -28,7 +42,7 @@ MAX_CHECKS_BEFORE_WIGGLE = 7    # Max checks for repositioned heliostat before w
 MAX_SENDS = 10                  # Max times to try to send command before raising exception
 MAX_WIGGLES = 3                 # Max times to try wiggling
 MAX_WRITES = 50                 # Max times to try to write command to port
-RESPONSE_LEN = 11               # Length of response packet
+RESPONSE_LEN = 13               # Length of response packet
 SLEEP_AFTER_FAILED_WRITE = 60   # Seconds to sleep after a failed write to the controller.
 SLEEP_BETWEEN_CHECKS = 3.0      # Seconds to sleep between checks for repositioned heliostat
 SPEED_NORMAL = 21               # Normal speed
@@ -41,10 +55,6 @@ def clamp(value, low_bound, high_bound):
     """Clamp value to be between low and high bound (inclusive)."""
     return int(max(low_bound, min(value, high_bound)))
 
-def clamp_azimuth_elevation(azimuth, elevation):
-    return (clamp(azimuth, AZIMUTH_MIN, AZIMUTH_MAX),
-            clamp(elevation, ELEVATION_MIN, ELEVATION_MAX))
-
 class Encoder(struct.Struct):
     """Encode a command packet to be written to the controller."""
     def __init__(self):
@@ -54,17 +64,19 @@ class Encoder(struct.Struct):
         if not SPEED_MIN <= speed <= SPEED_MAX:
             raise ValueError("Speed {0} out of bounds {1}-{2}".format(speed, SPEED_MIN, SPEED_MAX))
 
-    def azimuth(self, value, speed):
-        if not AZIMUTH_MIN <= value <= AZIMUTH_MAX:
-            raise ValueError("Azimuth {0} out of bounds {1}-{2}".format(value, AZIMUTH_MIN, AZIMUTH_MAX))
+    def azimuth(self, new_az, speed):
+        if not AZIMUTH_MIN <= new_az <= AZIMUTH_MAX:
+            raise ValueError("Azimuth {0} out of bounds {1}-{2}".format(new_az, AZIMUTH_MIN, AZIMUTH_MAX))
         self._validate_speed(speed)
-        return self.pack(SYNC_BYTE, SYNC_BYTE, SYNC_BYTE, value, speed, 0, 0, AZIMUTH_CMD)
+        return self.pack(SYNC_BYTE, SYNC_BYTE, SYNC_BYTE, new_az, speed, 0, 0, AZIMUTH_CMD)
 
-    def elevation(self, value, speed):
-        if not ELEVATION_MIN <= value <= ELEVATION_MAX:
-            raise ValueError("Azimuth {0} out of bounds {1}-{2}".format(value, ELEVATION_MIN, ELEVATION_MAX))
+    def elevation(self, new_el, speed):
+        if not ELEVATION_MIN <= new_el <= ELEVATION_MAX:
+            raise ValueError("Elevation {0} out of bounds {1}-{2}".format(new_el,
+                                                                          ELEVATION_MIN,
+                                                                          ELEVATION_MAX))
         self._validate_speed(speed)
-        return self.pack(SYNC_BYTE, SYNC_BYTE, SYNC_BYTE, 0, 0, value, speed, ELEVATION_CMD)
+        return self.pack(SYNC_BYTE, SYNC_BYTE, SYNC_BYTE, 0, 0, new_el, speed, ELEVATION_CMD)
 
     def stop(self):
         return self.pack(SYNC_BYTE, SYNC_BYTE, SYNC_BYTE, 0, 0, 0, 0, STOP_CMD)
@@ -72,10 +84,10 @@ class Encoder(struct.Struct):
 class Decoder(struct.Struct):
     """Decode a response packet from the controller."""
     def __init__(self):
-        super(Decoder, self).__init__('> 3b 4H')
+        super(Decoder, self).__init__('> 3b 5H')
 
     def decode(self, msge):
-        (sync1, sync2, sync3, azimuth, elevation, temperature, humidity) = self.unpack(msge)
+        (sync1, sync2, sync3, compass_azimuth, elevation, temperature, humidity, azimuth) = self.unpack(msge)
         for byte in (sync1, sync2, sync3):
             assert byte == SYNC_BYTE
 
@@ -83,12 +95,13 @@ class Decoder(struct.Struct):
         temperature = ((temperature * 0.0048875) * 100) - 273.15
         humidity = ((humidity * 0.0048875) - 0.8) * (100 / 3.75)
 
-        response = { 'azimuth': int(azimuth),
+        response = { 'compass_azimuth': int(compass_azimuth),
                      'elevation': int(elevation),
                      'temperature': round(temperature, 2),
-                     'humidity': round(humidity, 2) }
+                     'humidity': round(humidity, 2),
+                     'azimuth': int(azimuth) }
 
-        logger.debug("AZ {azimuth} EL {elevation} TEMP {temperature} HUM {humidity}".format(**response))
+        logger.debug("AZ {compass_azimuth} SPAZ {azimuth} EL {elevation} TEMP {temperature} HUM {humidity}".format(**response))
         return response
 
 class MockController(object):
@@ -111,10 +124,7 @@ class MockController(object):
         logger.debug("Report statistics.")
 
 
-class Controller(object):
-    """Control the heliostat. Tries to get the heliostat to a known
-    state by issuing a stop command from the constructor.
-    """
+class StringPotController(object):
 
     def __init__(self, device='/dev/ttyUSB0'):
         self.sends = 0          # Number of messages sent
@@ -276,12 +286,15 @@ class Controller(object):
         response = self.send_and_wait(command, 'elevation', new_elevation, may_wiggle=True)
         return (response['azimuth'], response['elevation'])
 
+class CompassController(StringPotController):
+    @staticmethod
+    def clamp_azimuth_elevation(azimuth, elevation):
+        return (clamp(azimuth, COMPASS_AZIMUTH_MIN, COMPASS_AZIMUTH_MAX),
+                clamp(elevation, ELEVATION_MIN, ELEVATION_MAX))
+
+    def azimuth(self, compass_azimuth, speed=SPEED_NORMAL):
+        return super(CompassController, self).azimuth(az_to_spaz(compass_azimuth), speed)
+
 logger.info("Azimuth range %d-%d", AZIMUTH_MIN, AZIMUTH_MAX)
 logger.info("Elevation range %d-%d", ELEVATION_MIN, ELEVATION_MAX)
 logger.info("Speed range %d-%d", SPEED_MIN, SPEED_MAX)
-
-if __name__ == '__main__':
-    controller = Controller('/dev/ttyUSB0')
-    controller.elevation(60)
-    controller.azimuth(115)
-    controller.report_stats()
