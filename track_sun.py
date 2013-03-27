@@ -46,11 +46,19 @@ def track(controller, finder):
         if (cur_azimuth != azimuth or cur_elevation != elevation):
             logger.info("Sun moved to AZ {0}, EL {1}".format(azimuth, elevation))
 
+            # Note that we are not updating our current position based
+            # on the return value from the heliostat. Doing so causes
+            # unnecessary movement of the mirror due to mapping the
+            # string-pot azimuth back to a compass azimuth. Instead,
+            # we assume the heliostat did the Right Thing.
             if cur_azimuth != azimuth:
-                cur_azimuth = controller.azimuth(azimuth)
+                controller.azimuth(azimuth)
+                cur_azimuth = azimuth
 
             if cur_elevation != elevation:
-                cur_elevation = controller.elevation(elevation)
+                controller.elevation(elevation)
+                cur_elevation = elevation
+
         else:
             logger.info("Sun in same location.")
 

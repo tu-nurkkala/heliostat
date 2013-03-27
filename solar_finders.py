@@ -121,8 +121,10 @@ class AstralSolarFinder(object):
             """Convert solar elevation to the elevation value for the mirror."""
             return 90 - ((90 - solar_elevation) / 2)
 
+        MAGIC_EL_CORRECTION = 4
+
         when = when.replace(tzinfo=self.location.tz)
         azimuth = int(self.location.solar_azimuth(when) + MAGNETIC_DECLINATION)
-        elevation = int(mirror_elevation(self.location.solar_elevation(when)))
+        elevation = int(mirror_elevation(self.location.solar_elevation(when)) + 4)
         return (azimuth, elevation)
 

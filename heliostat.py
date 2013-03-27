@@ -279,7 +279,9 @@ class StringPotController(object):
         logger.info("Stop")
         command = self.encoder.stop()
         response = self.send(command)
-        return (response['azimuth'], response['elevation'])
+        az, el = response['azimuth'], response['elevation'] 
+        logger.info("Stopped at azimuth %d elevation %d", az, el)
+        return (az, el)
 
     def azimuth(self, new_azimuth, speed=SPEED_NORMAL):
         """Rotate the heliostat to a new azimuth."""
@@ -306,6 +308,7 @@ class CompassController(StringPotController):
     def stop(self):
         az, el = super(CompassController, self).stop()
         az = spaz_to_az(az)
+        logger.info("Stopped at compass azimuth %d elevation %d", az, el)
         return (az, el)
 
     def azimuth(self, compass_azimuth, speed=SPEED_NORMAL):
