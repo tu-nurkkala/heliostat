@@ -35,6 +35,8 @@ jeffs_data = (
 
 def track(controller, finder):
     cur_azimuth, cur_elevation = controller.stop()
+    logger.info("Current AZ {0}, EL {1}".format(cur_azimuth, cur_elevation))
+
     location = City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
 
     while True:
@@ -44,13 +46,15 @@ def track(controller, finder):
         if (cur_azimuth != azimuth or cur_elevation != elevation):
             logger.info("Sun moved to AZ {0}, EL {1}".format(azimuth, elevation))
 
-        if cur_azimuth != azimuth:
-            cur_azimuth = controller.azimuth(azimuth)
+            if cur_azimuth != azimuth:
+                cur_azimuth = controller.azimuth(azimuth)
 
-        if cur_elevation != elevation:
-            cur_elevation = controller.elevation(elevation)
+            if cur_elevation != elevation:
+                cur_elevation = controller.elevation(elevation)
+        else:
+            logger.info("Sun in same location.")
 
-        logger.debug("Sleeping %ds", SLEEP_TIME)
+        logger.info("Sleeping %ds", SLEEP_TIME)
         time.sleep(SLEEP_TIME)
 
 import argparse

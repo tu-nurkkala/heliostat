@@ -66,8 +66,8 @@ class EmpiricalSolarFinder(object):
 
         return (azimuth, elevation)
 
-class AstralSolarFinder(object):
-    """Finder using the Python Astral package."""
+class CorrectedAstralSolarFinder(object):
+    """Finder using the Python Astral package -- with attempt at corrections."""
     def __init__(self, location):
         logger.info("Location %s", location)
         self.location = location
@@ -108,3 +108,21 @@ class AstralSolarFinder(object):
         azimuth = int(azimuth_correction(self.location.solar_azimuth(when)) + MAGNETIC_DECLINATION)
         elevation = int(elevation_correction(mirror_elevation(self.location.solar_elevation(when))))
         return (azimuth, elevation)
+
+
+class AstralSolarFinder(object):
+    """Find the sun using the Python Astral package."""
+    def __init__(self, location):
+        logger.info("Location %s", location)
+        self.location = location
+
+    def find(self, when):
+        def mirror_elevation(solar_elevation):
+            """Convert solar elevation to the elevation value for the mirror."""
+            return 90 - ((90 - solar_elevation) / 2)
+
+        when = when.replace(tzinfo=self.location.tz)
+        azimuth = int(self.location.solar_azimuth(when) + MAGNETIC_DECLINATION)
+        elevation = int(mirror_elevation(self.location.solar_elevation(when)))
+        return (azimuth, elevation)
+

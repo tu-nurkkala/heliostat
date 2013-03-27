@@ -6,7 +6,7 @@ import struct
 import time
 
 logging.basicConfig(format="[%(asctime)s] %(levelname)s %(filename)s(%(lineno)d) %(message)s",
-                    level=logging.DEBUG)
+                    level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 AZ_SPAZ_SLOPE = 2.39960237277
@@ -29,15 +29,16 @@ def spaz_to_az(spaz):
 SPEED_MIN = 10
 SPEED_MAX = 21
 
-COMPASS_AZIMUTH_MIN = 120               # Hard limit ~115
-COMPASS_AZIMUTH_MAX = 215               # Hard limit ~224
+## Updated to reflect string pot readings.
+COMPASS_AZIMUTH_MIN = 105
+COMPASS_AZIMUTH_MAX = 265
 
 # Azimuths now tied to the values read from the string potentiometers.
 AZIMUTH_MIN = az_to_spaz(COMPASS_AZIMUTH_MIN)
 AZIMUTH_MAX = az_to_spaz(COMPASS_AZIMUTH_MAX)
 
 ELEVATION_MIN = 45              # Hard limit ~41
-ELEVATION_MAX = 75              # Hard limit ~75
+ELEVATION_MAX = 72              # Hard limit ~75
 
 ## Command bytes
 AZIMUTH_CMD = 0x10
@@ -53,7 +54,7 @@ MAX_WRITES = 50                 # Max times to try to write command to port
 RESPONSE_LEN = 13               # Length of response packet
 SLEEP_AFTER_FAILED_WRITE = 60   # Seconds to sleep after a failed write to the controller.
 SLEEP_BETWEEN_CHECKS = 3.0      # Seconds to sleep between checks for repositioned heliostat
-SPEED_NORMAL = 21               # Normal speed
+SPEED_NORMAL = 20               # Normal speed
 SYNC_BYTE = 0x41                # Synchronization byte
 WIGGLE_AZ_DELTA = 10            # Number of degrees to wiggle azimuth.
 WIGGLE_EL_DELTA = 3             # Number of degrees to wiggle elevation.
@@ -109,7 +110,8 @@ class Decoder(struct.Struct):
                      'humidity': round(humidity, 2),
                      'azimuth': int(azimuth) }
 
-        logger.debug("AZ {compass_azimuth} SPAZ {azimuth} EL {elevation} TEMP {temperature} HUM {humidity}".format(**response))
+        # The compass azimuth reading is so wrong that we don't even report it any longer.
+        logger.debug("SPAZ {azimuth} EL {elevation} TEMP {temperature} HUM {humidity}".format(**response))
         return response
 
 class MockController(object):
@@ -133,7 +135,6 @@ class MockController(object):
 
 
 class StringPotController(object):
-
     def __init__(self, device='/dev/ttyUSB0'):
         self.sends = 0          # Number of messages sent
         self.writes = 0         # Number of port writes (including failed attempts to write)
@@ -168,7 +169,7 @@ class StringPotController(object):
                 response = self.decoder.decode(buffer)
                 return response
             elif count >= MAX_WRITES:
-                logger.warning("Exceeded maximum writes")
+                logger.debug("Exceeded maximum writes")
                 self.failed_tries += 1
                 return None
             else:
@@ -204,7 +205,6 @@ class StringPotController(object):
         expected value.
         """
         assert(which_metric in ('azimuth', 'elevation'))
-        metric_name = which_metric.capitalize()
 
         wiggle_count = 0
         check_count = 0
@@ -213,7 +213,9 @@ class StringPotController(object):
             if check_count < MAX_CHECKS_BEFORE_WIGGLE:
                 response = self.send(command)
                 current_value = response[which_metric]
-                logger.info("%s %d", metric_name, current_value)
+                logger.info("{0} now {1} want {2} ({3:+d})".format(which_metric,
+                                                                   current_value, expected_value,
+                                                                   expected_value - current_value))
 
                 if current_value != expected_value:
                     # Not there yet
@@ -241,7 +243,6 @@ class StringPotController(object):
                     logger.debug("Wiggling disabled; giving up.")
                     return response
         self.stop()
-        logger.info("%s now %d", metric_name, response[which_metric])
         return response
 
     def wiggle(self, which_metric, expected_value):
@@ -285,6 +286,7 @@ class StringPotController(object):
         logger.info("Change azimuth to %d, speed %d", new_azimuth, speed)
         command = self.encoder.azimuth(new_azimuth, speed)
         response = self.send_and_wait(command, 'azimuth', new_azimuth, may_wiggle=True)
+        logger.info("Azimuth now %d", response['azimuth'])
         return (response['azimuth'], response['elevation'])
 
     def elevation(self, new_elevation, speed=SPEED_NORMAL):
@@ -292,6 +294,7 @@ class StringPotController(object):
         logger.info("Change elevation to %d, speed %d", new_elevation, speed)
         command = self.encoder.elevation(new_elevation, speed)
         response = self.send_and_wait(command, 'elevation', new_elevation, may_wiggle=True)
+        logger.info("Elevation now %d", response['elevation'])
         return (response['azimuth'], response['elevation'])
 
 class CompassController(StringPotController):
@@ -300,11 +303,18 @@ class CompassController(StringPotController):
         return (clamp(azimuth, COMPASS_AZIMUTH_MIN, COMPASS_AZIMUTH_MAX),
                 clamp(elevation, ELEVATION_MIN, ELEVATION_MAX))
 
-    def azimuth(self, compass_azimuth, speed=SPEED_NORMAL):
-        az, el = super(CompassController, self).azimuth(az_to_spaz(compass_azimuth), speed)
+    def stop(self):
+        az, el = super(CompassController, self).stop()
         az = spaz_to_az(az)
         return (az, el)
 
-logger.info("Azimuth range %d-%d", AZIMUTH_MIN, AZIMUTH_MAX)
+    def azimuth(self, compass_azimuth, speed=SPEED_NORMAL):
+        logger.info("Change compass azimuth to %d, speed %d", compass_azimuth, speed)
+        az, el = super(CompassController, self).azimuth(az_to_spaz(compass_azimuth), speed)
+        az = spaz_to_az(az)
+        logger.info("Compass azimuth now %d", az)
+        return (az, el)
+
+logger.info("Azimuth range %d-%d", COMPASS_AZIMUTH_MIN, COMPASS_AZIMUTH_MAX)
 logger.info("Elevation range %d-%d", ELEVATION_MIN, ELEVATION_MAX)
 logger.info("Speed range %d-%d", SPEED_MIN, SPEED_MAX)
