@@ -9,21 +9,24 @@ logging.basicConfig(format="[%(asctime)s] %(levelname)s %(filename)s(%(lineno)d)
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-AZ_SPAZ_SLOPE = 2.39960237277
-AZ_SPAZ_INTERCEPT = 84.8400496537
+class LinearInterp(object):
+    def __init__(self, name, slope, intercept):
+        self.name = name
+        self.slope = slope
+        self.intercept = intercept;
 
-def az_to_spaz(az):
-    """Convert compass azmuth to appropriate string pot reading. The
-    slope and intercept are based on a linear regression of
-    measurements taken by Jeff."""
-    spaz = int((AZ_SPAZ_SLOPE * az) + AZ_SPAZ_INTERCEPT)
-    logger.debug("AZ {0} -> SPAZ {1}".format(az, spaz))
-    return spaz
+    def forward(self, value):
+        rtn = int((self.slope * value) + self.intercept)
+        logger.debug("{0} forward {1} -> {2}".format(self.name, value, rtn))
+        return rtn
 
-def spaz_to_az(spaz):
-    az = int((spaz - AZ_SPAZ_INTERCEPT) / AZ_SPAZ_SLOPE)
-    logger.debug("SPAZ {0} -> AZ {1}".format(spaz, az))
-    return az
+    def reverse(self, value):
+        rtn = int((value - self.intercept) / self.slope)
+        logger.debug("{0} reverse {1} <- {2}".format(self.name, rtn, value))
+        return rtn
+
+az_interp = LinearInterp('AZ', 2.4459, 114.4)
+el_interp = LinearInterp('EL', 0.8264, 10.358)
 
 ## Device limits
 SPEED_MIN = 10
@@ -34,11 +37,11 @@ COMPASS_AZIMUTH_MIN = 105
 COMPASS_AZIMUTH_MAX = 265
 
 # Azimuths now tied to the values read from the string potentiometers.
-AZIMUTH_MIN = az_to_spaz(COMPASS_AZIMUTH_MIN)
-AZIMUTH_MAX = az_to_spaz(COMPASS_AZIMUTH_MAX)
+AZIMUTH_MIN = az_interp.forward(COMPASS_AZIMUTH_MIN)
+AZIMUTH_MAX = az_interp.forward(COMPASS_AZIMUTH_MAX)
 
-ELEVATION_MIN = 45              # Hard limit ~41
-ELEVATION_MAX = 72              # Hard limit ~75
+ELEVATION_MIN = 20              # Hard limit ~10
+ELEVATION_MAX = 80              # Hard limit ~83
 
 ## Command bytes
 AZIMUTH_CMD = 0x10
@@ -280,7 +283,7 @@ class StringPotController(object):
         command = self.encoder.stop()
         response = self.send(command)
         az, el = response['azimuth'], response['elevation'] 
-        logger.info("Stopped at azimuth %d elevation %d", az, el)
+        logger.info("Stopped at azimuth %d mirror elevation %d", az, el)
         return (az, el)
 
     def azimuth(self, new_azimuth, speed=SPEED_NORMAL):
@@ -307,15 +310,22 @@ class CompassController(StringPotController):
 
     def stop(self):
         az, el = super(CompassController, self).stop()
-        az = spaz_to_az(az)
-        logger.info("Stopped at compass azimuth %d elevation %d", az, el)
+        az = az_interp.reverse(az)
+        logger.info("Stopped at compass azimuth %d mirror elevation %d", az, el)
         return (az, el)
 
     def azimuth(self, compass_azimuth, speed=SPEED_NORMAL):
         logger.info("Change compass azimuth to %d, speed %d", compass_azimuth, speed)
-        az, el = super(CompassController, self).azimuth(az_to_spaz(compass_azimuth), speed)
-        az = spaz_to_az(az)
+        az, el = super(CompassController, self).azimuth(az_interp.forward(compass_azimuth), speed)
+        az = az_interp.reverse(az)
         logger.info("Compass azimuth now %d", az)
+        return (az, el)
+
+    def elevation(self, mirror_elevation, speed=SPEED_NORMAL):
+        logger.info("Change mirror elevation to %d, speed %d", mirror_elevation, speed)
+        az, el = super(CompassController, self).elevation(el_interp.forward(mirror_elevation), speed)
+        el = el_interp.reverse(el)
+        logger.info("Mirror elevation now %d", el)
         return (az, el)
 
 logger.info("Azimuth range %d-%d", COMPASS_AZIMUTH_MIN, COMPASS_AZIMUTH_MAX)

@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 
-import datetime
 import time
-
-from astral import City
+import astral
 
 from heliostat import CompassController
 from solar_finders import AstralSolarFinder, EmpiricalSolarFinder
@@ -33,18 +31,22 @@ jeffs_data = (
     ('16:30', 225, 66),
     ('17:00', 228, 63) )
 
-def track(controller, finder):
-    cur_azimuth, cur_elevation = controller.stop()
-    logger.info("Current AZ {0}, EL {1}".format(cur_azimuth, cur_elevation))
+def mirror_elevation(solar_elevation):
+    """Convert solar elevation to the elevation value for the mirror."""
+    return 90 - ((90 - solar_elevation) / 2)
 
-    location = City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
+def track(controller, finder):
+    cur_azimuth, cur_mirror_elevation = controller.stop()
+    logger.info("Current AZ {0}, MEL {1}".format(cur_azimuth, cur_mirror_elevation))
 
     while True:
-        when = datetime.datetime.now(tz=location.tz)
-        azimuth, elevation = controller.clamp_azimuth_elevation(*finder.find(when))
+        azimuth, solar_elevation = controller.clamp_azimuth_elevation(*finder.find())
+        logger.info("AZ %d SEL %d", azimuth, solar_elevation)
+        new_mirror_elevation = mirror_elevation(solar_elevation)
+        logger.info("AZ %d MEL %d", azimuth, new_mirror_elevation)
         
-        if (cur_azimuth != azimuth or cur_elevation != elevation):
-            logger.info("Sun moved to AZ {0}, EL {1}".format(azimuth, elevation))
+        if (cur_azimuth != azimuth or cur_mirror_elevation != new_mirror_elevation):
+            logger.info("Sun moved to AZ {0}, SEL {1}".format(azimuth, solar_elevation))
 
             # Note that we are not updating our current position based
             # on the return value from the heliostat. Doing so causes
@@ -55,9 +57,9 @@ def track(controller, finder):
                 controller.azimuth(azimuth)
                 cur_azimuth = azimuth
 
-            if cur_elevation != elevation:
-                controller.elevation(elevation)
-                cur_elevation = elevation
+            if cur_mirror_elevation != new_mirror_elevation:
+                controller.elevation(new_mirror_elevation)
+                cur_mirror_elevation = new_mirror_elevation
 
         else:
             logger.info("Sun in same location.")
@@ -65,25 +67,15 @@ def track(controller, finder):
         logger.info("Sleeping %ds", SLEEP_TIME)
         time.sleep(SLEEP_TIME)
 
-import argparse
-parser = argparse.ArgumentParser(description='Track the sun')
-parser.set_defaults(finder='analytic')
-
-parser.add_argument('--empirical', action='store_const', const='empirical', dest='finder',
-                    help='use empirical solar finder')
-parser.add_argument('--analytical', action='store_const', const='analytic', dest='finder',
-                    help='use analytic solar finder')
-args = parser.parse_args()
 
 controller = CompassController()
 
-if args.finder == 'analytic':
-    upland = City(("Upland", "USA", "40°28'N", "85°30'W", "US/Eastern"))
-    finder = AstralSolarFinder(upland)
-elif args.finder == 'empirical':
-    finder = EmpiricalSolarFinder(jeffs_data)
-else:
-    raise ValueError("Invalid finder '%s'", args.finder)
+upland = astral.Location(("Upland", "USA",
+                          """40°27'22"N""",
+                          """85°29'43"W""",
+                          "US/Eastern"))
+
+finder = AstralSolarFinder(upland)
 
 try:
     track(controller, finder)

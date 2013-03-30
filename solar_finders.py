@@ -5,8 +5,6 @@ import time
 
 MAGNETIC_DECLINATION = 5.1      # Declination in degrees at Upland, September, 2012
 
-from astral import City
-
 import logging
 logger = logging.getLogger(__name__)
 
@@ -116,15 +114,8 @@ class AstralSolarFinder(object):
         logger.info("Location %s", location)
         self.location = location
 
-    def find(self, when):
-        def mirror_elevation(solar_elevation):
-            """Convert solar elevation to the elevation value for the mirror."""
-            return 90 - ((90 - solar_elevation) / 2)
-
-        MAGIC_EL_CORRECTION = 4
-
-        when = when.replace(tzinfo=self.location.tz)
-        azimuth = int(self.location.solar_azimuth(when) + MAGNETIC_DECLINATION)
-        elevation = int(mirror_elevation(self.location.solar_elevation(when)) + 4)
+    def find(self):
+        azimuth = int(self.location.solar_azimuth())
+        elevation = int(self.location.solar_elevation())
         return (azimuth, elevation)
 
